@@ -38,3 +38,17 @@ python manage.py createsuperuser
 ```
 
 Then visit <http://127.0.0.1:8000/admin/> and log in with the credentials you just created.
+
+## Demo Data & API Tokens
+To explore the APIs without manually creating data, load the deterministic demo dataset:
+
+```bash
+python manage.py seed_demo_data
+```
+
+This command provisions facilities, medicines, inventory transactions, alerts, and user accounts. Every seeded user shares the password `ChangeMe123!`, and an API token is minted for each account via `rest_framework.authtoken`.
+
+### Token-Based Authentication
+- Retrieve a token by POSTing to `POST /api/auth/token/` with `{"username": "superadmin", "password": "ChangeMe123!"}`.
+- Use the token in subsequent requests: `Authorization: Token <token>`.
+- The React frontend (see `../frontend`) uses the same endpoint to authenticate.

@@ -5,6 +5,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
+from rest_framework.authtoken.views import obtain_auth_token
 
 from .views import ApiRootView, HealthCheckView
 
@@ -12,6 +13,7 @@ urlpatterns = [
     path("", ApiRootView.as_view(), name="api-root"),
     path("admin/", admin.site.urls),
     path("api/health/", HealthCheckView.as_view(), name="health-check"),
+    path("api/auth/token/", obtain_auth_token, name="api-token"),
     path("api/v1/accounts/", include("accounts.urls")),
     path("api/v1/inventory/", include("inventory.urls")),
 ]

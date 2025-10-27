@@ -1,316 +1,537 @@
-import { useMemo } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./App.module.css";
+import { createFacility, createTransaction, fetchDashboard, login } from "./api";
+import type { Alert, DashboardData, Facility, InventoryTransaction, Medicine } from "./types";
 
-type FeatureCategory = {
-  title: string;
-  description: string;
-  items: string[];
+const FACILITY_INITIAL_STATE = {
+  name: "",
+  code: "",
+  facility_type: "hospital",
+  ownership: "public",
+  state: "",
+  city: "",
+  lga: "",
+  address: "",
 };
 
-type ArchitectureBlock = {
-  title: string;
-  summary: string;
-  highlights: string[];
+const TRANSACTION_INITIAL_STATE = {
+  facility: "",
+  medicine: "",
+  transaction_type: "receipt",
+  quantity: "",
+  source_destination: "",
+  notes: "",
+  occurred_at: new Date().toISOString().slice(0, 16),
+  batch_number: "",
 };
-
-type TechStackEntry = {
-  layer: string;
-  recommendation: string;
-  notes: string;
-};
-
-type RoadmapPhase = {
-  phase: string;
-  duration: string;
-  goals: string;
-};
-
-const heroCopy = {
-  title: "Healteex Platform",
-  subtitle:
-    "A unified digital health platform delivering data-driven visibility and forecasting for Nigeria's pharmaceutical supply chain.",
-  cta: "Explore the plan",
-};
-
-const featureCategories: FeatureCategory[] = [
-  {
-    title: "Authentication & Roles",
-    description: "Secure access for pharmacists, policy makers, and facility administrators.",
-    items: [
-      "Multi-factor authentication with role-aware dashboards",
-      "Granular permissions enforced through Django REST Framework",
-      "Comprehensive audit trails for compliance",
-    ],
-  },
-  {
-    title: "Facility & Inventory",
-    description: "Real-time visibility into stock levels across facilities.",
-    items: [
-      "Facility profiles with location, ownership, and contact data",
-      "Manual and automated stock capture with low-stock alerts",
-      "Procurement planning workflows for suppliers and requisitions",
-    ],
-  },
-  {
-    title: "Forecasting & Analytics",
-    description: "AI-powered demand forecasting with operational insights.",
-    items: [
-      "Medicine demand predictions with confidence intervals",
-      "Historical consumption trends and safety stock guidance",
-      "Variance, wastage, and expiry analytics with proactive alerts",
-    ],
-  },
-  {
-    title: "Mobility & Integrations",
-    description: "Reach underserved facilities with offline-first tools.",
-    items: [
-      "Offline-capable Android experience using React Native",
-      "Data synchronization with DHIS2, OpenLMIS, and EMRs",
-      "Notification services for SMS, email, and in-app alerts",
-    ],
-  },
-];
-
-const architectureBlocks: ArchitectureBlock[] = [
-  {
-    title: "Frontend Experiences",
-    summary:
-      "React web and mobile apps deliver tailored dashboards, offline capture, and responsive analytics views.",
-    highlights: [
-      "Next.js web app with reusable component library",
-      "Expo-powered mobile app with SQLite offline store",
-      "Shared design system built from roadmap prototypes",
-    ],
-  },
-  {
-    title: "APIs & Integrations",
-    summary:
-      "A Django + DRF backend provides modular APIs with integration workers orchestrated via Celery and Airflow.",
-    highlights: [
-      "Role-based authentication via Django allauth + dj-rest-auth",
-      "Data ingestion workers for DHIS2, OpenLMIS, and EMRs",
-      "Batch and on-demand ML inference endpoints",
-    ],
-  },
-  {
-    title: "Data & Intelligence",
-    summary:
-      "PostgreSQL stores transactional data while ClickHouse or replicas power analytics, with ML models tracked via MLflow.",
-    highlights: [
-      "Feature store leveraging Feast or curated PostgreSQL schemas",
-      "Prophet, SARIMA, and transformer models for forecasting",
-      "Performance monitoring with Prometheus and Grafana",
-    ],
-  },
-];
-
-const techStack: TechStackEntry[] = [
-  { layer: "Frontend Web", recommendation: "React + Next.js (TypeScript)", notes: "SSR, Tailwind CSS integration" },
-  { layer: "Frontend Mobile", recommendation: "React Native (Expo)", notes: "Offline-first with SQLite" },
-  { layer: "Backend APIs", recommendation: "Django + DRF", notes: "Robust ORM and admin" },
-  { layer: "Authentication", recommendation: "Django allauth + dj-rest-auth", notes: "OAuth2/OIDC ready" },
-  { layer: "Database", recommendation: "PostgreSQL 14+", notes: "PostGIS for geospatial queries" },
-  { layer: "Warehouse", recommendation: "ClickHouse or PostgreSQL replica", notes: "Aggregated analytics" },
-  { layer: "Queue & Cache", recommendation: "Redis", notes: "Celery broker and cache" },
-  { layer: "Orchestration", recommendation: "Apache Airflow", notes: "ETL and model scheduling" },
-  { layer: "AI/ML", recommendation: "Prophet, scikit-learn, PyTorch", notes: "MLflow for experiment tracking" },
-  { layer: "Monitoring", recommendation: "Prometheus + Grafana", notes: "System health and observability" },
-];
-
-const roadmapPhases: RoadmapPhase[] = [
-  {
-    phase: "Phase 1: MVP",
-    duration: "Months 0-4",
-    goals:
-      "Core authentication, inventory capture, basic forecasting, DHIS2 sandbox integration, and Android beta via Expo.",
-  },
-  {
-    phase: "Phase 2: Beta",
-    duration: "Months 5-8",
-    goals:
-      "Expanded analytics dashboards, advanced forecasting, alerting workflows, offline sync, and pilot deployments.",
-  },
-  {
-    phase: "Phase 3: Launch",
-    duration: "Months 9-12",
-    goals:
-      "Scale infrastructure, multi-region support, performance optimization, compliance certification, nationwide rollout.",
-  },
-];
-
-const immediateNextSteps: string[] = [
-  "Assemble the cross-functional core team and governance structure",
-  "Conduct stakeholder discovery workshops with pilot facilities",
-  "Finalize MVP UX prototypes in Figma and Miro",
-  "Set up data-sharing agreements and initiate Airflow ingestion sandbox",
-  "Establish CI/CD baselines with Dockerized environments",
-  "Prototype Django integrations for DHIS2 and OpenLMIS",
-];
 
 function App() {
-  const navItems = useMemo(
-    () => [
-      { id: "vision", label: "Vision" },
-      { id: "features", label: "MVP Features" },
-      { id: "architecture", label: "Architecture" },
-      { id: "stack", label: "Tech Stack" },
-      { id: "roadmap", label: "Roadmap" },
-      { id: "next", label: "Next Steps" },
-    ],
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("healteex-token"));
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [credentials, setCredentials] = useState({ username: "", password: "" });
+  const [facilityForm, setFacilityForm] = useState(FACILITY_INITIAL_STATE);
+  const [transactionForm, setTransactionForm] = useState(TRANSACTION_INITIAL_STATE);
+
+  const facilityMap = useMemo(() => {
+    const entries = new Map<number, Facility>();
+    dashboard?.facilities.forEach((facility) => entries.set(facility.id, facility));
+    return entries;
+  }, [dashboard]);
+
+  const medicineMap = useMemo(() => {
+    const entries = new Map<number, Medicine>();
+    dashboard?.medicines.forEach((medicine) => entries.set(medicine.id, medicine));
+    return entries;
+  }, [dashboard]);
+
+  const loadDashboard = useCallback(
+    async (authToken: string) => {
+      setLoading(true);
+      try {
+        const next = await fetchDashboard(authToken);
+        setDashboard(next);
+        setStatusMessage(null);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "Unable to fetch data";
+        setStatusMessage(detail);
+        if (detail.toLowerCase().includes("authentication")) {
+          setToken(null);
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
     []
   );
 
+  useEffect(() => {
+    if (token) {
+      localStorage.setItem("healteex-token", token);
+      void loadDashboard(token);
+    } else {
+      localStorage.removeItem("healteex-token");
+      setDashboard(null);
+    }
+  }, [token, loadDashboard]);
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoading(true);
+    try {
+      const authToken = await login(credentials.username, credentials.password);
+      setToken(authToken);
+      setStatusMessage("Authentication successful. Loading data...");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Login failed";
+      setStatusMessage(detail || "Invalid credentials");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setToken(null);
+    setFacilityForm(FACILITY_INITIAL_STATE);
+    setTransactionForm({ ...TRANSACTION_INITIAL_STATE, occurred_at: new Date().toISOString().slice(0, 16) });
+    setCredentials({ username: "", password: "" });
+  };
+
+  const handleFacilitySubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token) return;
+    setLoading(true);
+    try {
+      await createFacility(token, facilityForm);
+      setFacilityForm(FACILITY_INITIAL_STATE);
+      setStatusMessage("Facility created");
+      await loadDashboard(token);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unable to create facility";
+      setStatusMessage(detail);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTransactionSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token) return;
+    setLoading(true);
+    try {
+      await createTransaction(token, {
+        facility: Number(transactionForm.facility),
+        medicine: Number(transactionForm.medicine),
+        transaction_type: transactionForm.transaction_type,
+        quantity: transactionForm.quantity || "0",
+        source_destination: transactionForm.source_destination,
+        notes: transactionForm.notes,
+        batch_number: transactionForm.batch_number || undefined,
+        occurred_at: new Date(transactionForm.occurred_at).toISOString(),
+      });
+      setTransactionForm({ ...TRANSACTION_INITIAL_STATE, occurred_at: new Date().toISOString().slice(0, 16) });
+      setStatusMessage("Transaction recorded");
+      await loadDashboard(token);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unable to create transaction";
+      setStatusMessage(detail);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const totalStock = useMemo(() => {
+    if (!dashboard) return 0;
+    return dashboard.stockSnapshots.reduce((sum, snapshot) => sum + Number(snapshot.stock_on_hand), 0);
+  }, [dashboard]);
+
+  const openAlerts = useMemo(() => dashboard?.alerts.filter((alert) => alert.status === "open").length ?? 0, [dashboard]);
+
+  if (!token) {
+    return (
+      <div className={styles.appShell}>
+        <section className={styles.authWrapper}>
+          <header className={styles.authHeader}>
+            <h1>Healteex Control Center</h1>
+            <p>Use any seeded credentials (e.g. username "superadmin") with the password "ChangeMe123!".</p>
+          </header>
+          <form className={styles.loginCard} onSubmit={handleLogin}>
+            <div className={styles.formGroup}>
+              <label htmlFor="username">Username</label>
+              <input
+                id="username"
+                className={styles.textInput}
+                value={credentials.username}
+                onChange={(event) => setCredentials({ ...credentials, username: event.target.value })}
+                required
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                className={styles.textInput}
+                value={credentials.password}
+                onChange={(event) => setCredentials({ ...credentials, password: event.target.value })}
+                required
+              />
+            </div>
+            <button className={styles.primaryButton} type="submit" disabled={loading}>
+              {loading ? "Authenticating..." : "Sign in"}
+            </button>
+            {statusMessage ? <p className={styles.statusMessage}>{statusMessage}</p> : null}
+          </form>
+        </section>
+      </div>
+    );
+  }
+
+  const facilities = dashboard?.facilities ?? [];
+  const medicines = dashboard?.medicines ?? [];
+  const transactions = dashboard ? dashboard.transactions.slice(0, 8) : [];
+  const alerts = dashboard?.alerts ?? [];
+
+  const formatDateTime = (value: string) => new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+
   return (
     <div className={styles.appShell}>
-      <header className={styles.hero}>
-        <nav className={styles.nav} aria-label="Primary">
-          <span className={styles.brand}>Healteex</span>
-          <ul className={styles.navList}>
-            {navItems.map((item) => (
-              <li key={item.id}>
-                <a className={styles.navLink} href={`#${item.id}`}>
-                  {item.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className={styles.heroContent}>
-          <p className={styles.heroEyebrow}>Product Blueprint</p>
-          <h1 className={styles.heroTitle}>{heroCopy.title}</h1>
-          <p className={styles.heroSubtitle}>{heroCopy.subtitle}</p>
-          <a className={styles.heroCta} href="#features">
-            {heroCopy.cta}
-          </a>
-        </div>
-      </header>
+      <div className={styles.dashboardShell}>
+        <header className={styles.dashboardHeader}>
+          <div className={styles.titleBlock}>
+            <h1>Inventory Overview</h1>
+            <p>Authenticated via token. Connected to Django REST API.</p>
+          </div>
+          <div className={styles.actionsRow}>
+            <button className={styles.secondaryButton} type="button" onClick={() => token && loadDashboard(token)} disabled={loading}>
+              Refresh
+            </button>
+            <button className={styles.secondaryButton} type="button" onClick={handleLogout}>
+              Log out
+            </button>
+          </div>
+        </header>
 
-      <main className={styles.mainContent}>
-        <section id="vision" className={styles.section} aria-labelledby="vision-title">
-          <div className={styles.sectionHeader}>
-            <h2 id="vision-title">Product Vision</h2>
-            <p>
-              Deliver a unified digital health platform that optimizes Nigeria&apos;s pharmaceutical supply chain through
-              AI-powered demand forecasting, seamless integrations, and equitable access for underserved communities.
-            </p>
-          </div>
-          <div className={styles.calloutGrid}>
-            <article className={styles.calloutCard}>
-              <h3>Why now?</h3>
-              <p>
-                Stock-outs and fragmented data prevent efficient care delivery. Healteex aligns stakeholders around
-                trustworthy, timely insights to improve medicine availability.
-              </p>
-            </article>
-            <article className={styles.calloutCard}>
-              <h3>Who benefits?</h3>
-              <p>
-                Pharmacists, policy makers, and facility administrators receive targeted dashboards, while rural clinicians
-                gain mobile tools to stay connected even offline.
-              </p>
-            </article>
-          </div>
+        <section className={styles.summaryGrid}>
+          <article className={styles.summaryCard}>
+            <h2>Facilities</h2>
+            <p>{facilities.length}</p>
+          </article>
+          <article className={styles.summaryCard}>
+            <h2>Medicines tracked</h2>
+            <p>{medicines.length}</p>
+          </article>
+          <article className={styles.summaryCard}>
+            <h2>Open alerts</h2>
+            <p>{openAlerts}</p>
+          </article>
+          <article className={styles.summaryCard}>
+            <h2>National stock on hand</h2>
+            <p>{totalStock.toLocaleString()}</p>
+          </article>
         </section>
 
-        <section id="features" className={styles.section} aria-labelledby="features-title">
+        {statusMessage ? <p className={styles.statusMessage}>{statusMessage}</p> : null}
+
+        <section className={styles.section}>
           <div className={styles.sectionHeader}>
-            <h2 id="features-title">MVP Feature Pillars</h2>
-            <p>Four foundational pillars define the MVP scope and user flows.</p>
+            <h2>Key facilities</h2>
+            <p className={styles.inlineHelp}>Latest entries from the facility API.</p>
           </div>
-          <div className={styles.cardGrid}>
-            {featureCategories.map((category) => (
-              <article key={category.title} className={styles.featureCard}>
-                <h3>{category.title}</h3>
-                <p className={styles.featureDescription}>{category.description}</p>
-                <ul className={styles.featureList}>
-                  {category.items.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </div>
+          {facilities.length ? (
+            <div className={styles.listGrid}>
+              {facilities.slice(0, 4).map((facility) => (
+                <article key={facility.id} className={styles.card}>
+                  <p className={styles.cardTitle}>{facility.name}</p>
+                  <span className={styles.pill}>{facility.facility_type}</span>
+                  <p>{facility.city}, {facility.state}</p>
+                  <p>Code: {facility.code}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className={styles.emptyState}>No facilities yet.</div>
+          )}
         </section>
 
-        <section id="architecture" className={styles.section} aria-labelledby="architecture-title">
+        <section className={styles.section}>
           <div className={styles.sectionHeader}>
-            <h2 id="architecture-title">System Architecture</h2>
-            <p>Composable services connect data ingestion, analytics, and user experiences.</p>
+            <h2>Recent transactions</h2>
+            <p className={styles.inlineHelp}>Syncs straight from the `/transactions/` endpoint.</p>
           </div>
-          <div className={styles.cardGrid}>
-            {architectureBlocks.map((block) => (
-              <article key={block.title} className={styles.architectureCard}>
-                <h3>{block.title}</h3>
-                <p>{block.summary}</p>
-                <ul className={styles.featureList}>
-                  {block.highlights.map((highlight) => (
-                    <li key={highlight}>{highlight}</li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section id="stack" className={styles.section} aria-labelledby="stack-title">
-          <div className={styles.sectionHeader}>
-            <h2 id="stack-title">Technology Stack</h2>
-            <p>Open-source tools provide a sustainable foundation from prototype to launch.</p>
-          </div>
-          <div className={styles.tableWrapper}>
-            <table className={styles.techTable}>
-              <thead>
-                <tr>
-                  <th scope="col">Layer</th>
-                  <th scope="col">Recommendation</th>
-                  <th scope="col">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {techStack.map((entry) => (
-                  <tr key={entry.layer}>
-                    <th scope="row">{entry.layer}</th>
-                    <td>{entry.recommendation}</td>
-                    <td>{entry.notes}</td>
+          {transactions.length ? (
+            <div className={styles.tableWrapper}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Facility</th>
+                    <th>Medicine</th>
+                    <th>Type</th>
+                    <th>Quantity</th>
+                    <th>Occurred at</th>
                   </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((transaction: InventoryTransaction) => (
+                    <tr key={transaction.id}>
+                      <td>{facilityMap.get(transaction.facility)?.name ?? transaction.facility}</td>
+                      <td>{medicineMap.get(transaction.medicine)?.name ?? transaction.medicine}</td>
+                      <td>{transaction.transaction_type}</td>
+                      <td>{transaction.quantity}</td>
+                      <td>{formatDateTime(transaction.occurred_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className={styles.emptyState}>No transactions captured yet.</div>
+          )}
+        </section>
+
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <h2>Active alerts</h2>
+            <p className={styles.inlineHelp}>Auto-populated from analytics triggers.</p>
+          </div>
+          {alerts.length ? (
+            <div className={styles.listGrid}>
+              {alerts.map((alert: Alert) => (
+                <article key={alert.id} className={styles.card}>
+                  <p className={styles.cardTitle}>{medicineMap.get(alert.medicine)?.name ?? "Unknown medicine"}</p>
+                  <span className={styles.tagStatus} data-variant={alert.status}>
+                    {alert.status}
+                  </span>
+                  <p>{alert.message}</p>
+                  <p className={styles.inlineHelp}>{formatDateTime(alert.triggered_at)}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className={styles.emptyState}>No alerts 🎉</div>
+          )}
+        </section>
+
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <h2>Create facility</h2>
+            <p className={styles.inlineHelp}>Adds a facility through the same API the mobile app would call.</p>
+          </div>
+          <form className={styles.formGrid} onSubmit={handleFacilitySubmit}>
+            <div className={styles.formGroup}>
+              <label htmlFor="facility-name">Name</label>
+              <input
+                id="facility-name"
+                className={styles.textInput}
+                value={facilityForm.name}
+                onChange={(event) => setFacilityForm({ ...facilityForm, name: event.target.value })}
+                required
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="facility-code">Code</label>
+              <input
+                id="facility-code"
+                className={styles.textInput}
+                value={facilityForm.code}
+                onChange={(event) => setFacilityForm({ ...facilityForm, code: event.target.value })}
+                required
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="facility-type">Type</label>
+              <select
+                id="facility-type"
+                className={styles.selectInput}
+                value={facilityForm.facility_type}
+                onChange={(event) => setFacilityForm({ ...facilityForm, facility_type: event.target.value })}
+              >
+                <option value="hospital">Hospital</option>
+                <option value="clinic">Clinic</option>
+                <option value="pharmacy">Pharmacy</option>
+                <option value="health_post">Health Post</option>
+                <option value="warehouse">Warehouse</option>
+              </select>
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="facility-ownership">Ownership</label>
+              <select
+                id="facility-ownership"
+                className={styles.selectInput}
+                value={facilityForm.ownership}
+                onChange={(event) => setFacilityForm({ ...facilityForm, ownership: event.target.value })}
+              >
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+                <option value="faith_based">Faith based</option>
+                <option value="ngo">NGO</option>
+              </select>
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="facility-state">State</label>
+              <input
+                id="facility-state"
+                className={styles.textInput}
+                value={facilityForm.state}
+                onChange={(event) => setFacilityForm({ ...facilityForm, state: event.target.value })}
+                required
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="facility-city">City</label>
+              <input
+                id="facility-city"
+                className={styles.textInput}
+                value={facilityForm.city}
+                onChange={(event) => setFacilityForm({ ...facilityForm, city: event.target.value })}
+                required
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="facility-lga">LGA</label>
+              <input
+                id="facility-lga"
+                className={styles.textInput}
+                value={facilityForm.lga}
+                onChange={(event) => setFacilityForm({ ...facilityForm, lga: event.target.value })}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="facility-address">Address</label>
+              <input
+                id="facility-address"
+                className={styles.textInput}
+                value={facilityForm.address}
+                onChange={(event) => setFacilityForm({ ...facilityForm, address: event.target.value })}
+              />
+            </div>
+            <div className={styles.actionsRow}>
+              <button className={styles.primaryButton} type="submit" disabled={loading}>
+                {loading ? "Saving..." : "Save facility"}
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <h2>Record inventory transaction</h2>
+            <p className={styles.inlineHelp}>Posts directly to the `/transactions/` endpoint.</p>
+          </div>
+          <form className={styles.formGrid} onSubmit={handleTransactionSubmit}>
+            <div className={styles.formGroup}>
+              <label htmlFor="transaction-facility">Facility</label>
+              <select
+                id="transaction-facility"
+                className={styles.selectInput}
+                value={transactionForm.facility}
+                onChange={(event) => setTransactionForm({ ...transactionForm, facility: event.target.value })}
+                required
+              >
+                <option value="" disabled>
+                  Select facility
+                </option>
+                {facilities.map((facility) => (
+                  <option key={facility.id} value={facility.id}>
+                    {facility.name}
+                  </option>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </select>
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="transaction-medicine">Medicine</label>
+              <select
+                id="transaction-medicine"
+                className={styles.selectInput}
+                value={transactionForm.medicine}
+                onChange={(event) => setTransactionForm({ ...transactionForm, medicine: event.target.value })}
+                required
+              >
+                <option value="" disabled>
+                  Select medicine
+                </option>
+                {medicines.map((medicine) => (
+                  <option key={medicine.id} value={medicine.id}>
+                    {medicine.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="transaction-type">Transaction type</label>
+              <select
+                id="transaction-type"
+                className={styles.selectInput}
+                value={transactionForm.transaction_type}
+                onChange={(event) => setTransactionForm({ ...transactionForm, transaction_type: event.target.value })}
+              >
+                <option value="receipt">Receipt</option>
+                <option value="issue">Issue</option>
+                <option value="adjustment">Adjustment</option>
+                <option value="stock_count">Stock count</option>
+              </select>
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="transaction-quantity">Quantity</label>
+              <input
+                id="transaction-quantity"
+                type="number"
+                className={styles.numberInput}
+                value={transactionForm.quantity}
+                onChange={(event) => setTransactionForm({ ...transactionForm, quantity: event.target.value })}
+                required
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="transaction-source">Source / destination</label>
+              <input
+                id="transaction-source"
+                className={styles.textInput}
+                value={transactionForm.source_destination}
+                onChange={(event) => setTransactionForm({ ...transactionForm, source_destination: event.target.value })}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="transaction-batch">Batch number</label>
+              <input
+                id="transaction-batch"
+                className={styles.textInput}
+                value={transactionForm.batch_number}
+                onChange={(event) => setTransactionForm({ ...transactionForm, batch_number: event.target.value })}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="transaction-occurred">Occurred at</label>
+              <input
+                id="transaction-occurred"
+                type="datetime-local"
+                className={styles.dateInput}
+                value={transactionForm.occurred_at}
+                onChange={(event) => setTransactionForm({ ...transactionForm, occurred_at: event.target.value })}
+                required
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label htmlFor="transaction-notes">Notes</label>
+              <textarea
+                id="transaction-notes"
+                className={styles.textArea}
+                value={transactionForm.notes}
+                onChange={(event) => setTransactionForm({ ...transactionForm, notes: event.target.value })}
+              />
+            </div>
+            <div className={styles.actionsRow}>
+              <button className={styles.primaryButton} type="submit" disabled={loading}>
+                {loading ? "Submitting..." : "Record transaction"}
+              </button>
+            </div>
+          </form>
         </section>
-
-        <section id="roadmap" className={styles.section} aria-labelledby="roadmap-title">
-          <div className={styles.sectionHeader}>
-            <h2 id="roadmap-title">12-Month Roadmap</h2>
-            <p>Milestones guide the team from MVP validation to nationwide rollout.</p>
-          </div>
-          <ol className={styles.roadmapList}>
-            {roadmapPhases.map((phase) => (
-              <li key={phase.phase} className={styles.roadmapItem}>
-                <h3>{phase.phase}</h3>
-                <p className={styles.roadmapDuration}>{phase.duration}</p>
-                <p>{phase.goals}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section id="next" className={styles.section} aria-labelledby="next-title">
-          <div className={styles.sectionHeader}>
-            <h2 id="next-title">Immediate Next Steps</h2>
-            <p>Concrete actions kickstart development and stakeholder alignment.</p>
-          </div>
-          <ul className={styles.nextStepsList}>
-            {immediateNextSteps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ul>
-        </section>
-      </main>
-
-      <footer className={styles.footer}>
-        <p>© {new Date().getFullYear()} Healteex. Building resilient pharmaceutical supply chains.</p>
-      </footer>
+      </div>
     </div>
   );
 }
