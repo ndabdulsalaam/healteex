@@ -1,3 +1,28 @@
+export type UserRole = "pharmacist" | "policy_maker" | "facility_admin" | "super_admin";
+
+export type AuthUser = {
+  id: number;
+  username: string;
+  email: string;
+  role: UserRole | null;
+  first_name: string;
+  last_name: string;
+};
+
+export type JwtAuthResponse = {
+  access: string;
+  refresh: string;
+  token_type: "Bearer";
+  expires_in: number;
+  remember_me: boolean;
+  user: AuthUser;
+};
+
+export type SignupRequestResponse = {
+  detail: string;
+  expires_in_minutes: number;
+};
+
 export type Facility = {
   id: number;
   name: string;

@@ -5,15 +5,26 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
-from rest_framework.authtoken.views import obtain_auth_token
+from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
 
-from .views import ApiRootView, HealthCheckView
+
+from .views import (
+    ApiRootView,
+    HealthCheckView,
+    ObtainAPITokenView,
+    EmailOrUsernameTokenObtainPairView,
+    GoogleSignInView,
+)
 
 urlpatterns = [
     path("", ApiRootView.as_view(), name="api-root"),
     path("admin/", admin.site.urls),
     path("api/health/", HealthCheckView.as_view(), name="health-check"),
-    path("api/auth/token/", obtain_auth_token, name="api-token"),
+    path("api/auth/token/", ObtainAPITokenView.as_view(), name="api-token"),
+    path("api/auth/jwt/create/", EmailOrUsernameTokenObtainPairView.as_view(), name="jwt-create"),
+    path("api/auth/jwt/refresh/", TokenRefreshView.as_view(), name="jwt-refresh"),
+    path("api/auth/jwt/verify/", TokenVerifyView.as_view(), name="jwt-verify"),
+    path("api/auth/google/", GoogleSignInView.as_view(), name="google-sign-in"),
     path("api/v1/accounts/", include("accounts.urls")),
     path("api/v1/inventory/", include("inventory.urls")),
 ]

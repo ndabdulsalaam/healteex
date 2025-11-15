@@ -1,6 +1,6 @@
 # Healteex Frontend
 
-React + Vite dashboard that authenticates against the Django API, displays live inventory metrics, and lets you create facilities or post inventory transactions.
+React + Vite application for multi-role onboarding, authentication (email/password, Google OAuth), and inventory insights powered by the Django backend.
 
 ## Prerequisites
 - Node.js 18+
@@ -13,13 +13,19 @@ npm install
 ```
 
 ## Environment
-The client reads `VITE_API_BASE_URL` (defaults to `/api`). When running `npm run dev`, Vite proxies `/api/*` to `http://127.0.0.1:8000`, so you normally do not need to configure anything. For production builds behind Django, continue serving the compiled assets from the same domain so `/api` resolves correctly.
+Create `.env.local` with:
+```
+VITE_API_BASE_URL=http://127.0.0.1:8000/api
+# Optional – required for Google sign-in
+VITE_GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
+```
+`VITE_API_BASE_URL` defaults to `/api`, which works when the frontend is served by the Django dev server proxy. Configure `VITE_GOOGLE_CLIENT_ID` with a client ID from Google Cloud (Web application type) to render the one-tap/standard Google sign-in button.
 
 ## Development
 ```bash
 npm run dev
 ```
-Visit <http://127.0.0.1:5173>. Sign in with any seeded backend user (e.g. `superadmin` / `ChangeMe123!`).
+Visit <http://127.0.0.1:5173>. Use the signup flow to register per-role accounts or sign in with existing credentials.
 
 ## Production Build
 ```bash

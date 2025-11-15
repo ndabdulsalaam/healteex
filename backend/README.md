@@ -48,7 +48,16 @@ python manage.py seed_demo_data
 
 This command provisions facilities, medicines, inventory transactions, alerts, and user accounts. Every seeded user shares the password `ChangeMe123!`, and an API token is minted for each account via `rest_framework.authtoken`.
 
-### Token-Based Authentication
-- Retrieve a token by POSTing to `POST /api/auth/token/` with `{"username": "superadmin", "password": "ChangeMe123!"}`.
-- Use the token in subsequent requests: `Authorization: Token <token>`.
-- The React frontend (see `../frontend`) uses the same endpoint to authenticate.
+### Authentication
+- **JWT (recommended):** `POST /api/auth/jwt/create/` with `{"email": "superadmin@demo.healteex.ng", "password": "ChangeMe123!", "remember_me": true}` to receive `access` and `refresh` tokens. Omit `remember_me` (default) for a 1-day refresh; set it to `true` for a 30-day refresh window.
+- Refresh tokens with `POST /api/auth/jwt/refresh/` and verify with `POST /api/auth/jwt/verify/`. Use the access token in requests: `Authorization: Bearer <access>`.
+- **Google sign-in:** Once `GOOGLE_OAUTH_CLIENT_ID` is configured, exchange a Google ID token by POSTing to `/api/auth/google/` with `{"id_token": "<google-id-token>", "remember_me": true}`. A user is auto-provisioned (unusable password) if they do not already exist.
+- **Legacy tokens:** `POST /api/auth/token/` still issues a DRF Token (`Authorization: Token <token>`) for backward compatibility, but new clients should migrate to JWT.
+
+### Multi-role Signup Flow
+- Request access via `POST /api/v1/accounts/signup/request/` with `{"email": "user@example.com", "role": "pharmacist"}`. The API issues a time-limited token (default 30 minutes) and emails it to the user.
+- Complete registration with `POST /api/v1/accounts/signup/verify/` including the token, optional `password`, `first_name`, `last_name`, and `remember_me`. The response returns JWT credentials so the client can onboard immediately. Email links default to `/#/signup/verify?...` to align with the frontend hash router.
+- The same email can register for multiple roles by repeating the flow with different `role` values (`pharmacist`, `policy_maker`, `facility_admin`, `super_admin`). The frontend should route users to role-specific profile setup pages after verification.
+
+### CORS
+Cross-origin requests from the Vite dev server are allowed for `http://127.0.0.1:5173` and `http://localhost:5173`. Update `CORS_ALLOWED_ORIGINS` in `settings.py` (and `.env`) when deploying to a different host.
