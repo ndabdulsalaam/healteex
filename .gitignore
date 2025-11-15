@@ -4,7 +4,6 @@ __pycache__/
 *.sqlite3
 *.pyc
 .env
-.env.local
 .venv/
 venv/
 
@@ -15,6 +14,7 @@ media/
 # Node
 node_modules/
 dist/
+.env.local
 
 # OS
 .DS_Store
